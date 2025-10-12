@@ -1,0 +1,48 @@
+
+buses:
+  - name: motor_bus
+    interface: can0
+    bitrate: 500000
+    fd: false
+    dbc_file: "../td_can_bridges/schemas/motors.dbc"
+
+    rx_frames:
+      "RS02_Status1":
+        topic: "/td/rs02/angle_deg"
+        type: "std_msgs/msg/Float32"
+        fields: { mech_angle_deg: "data" }
+
+      "RS02_Status1__vel":
+        topic: "/td/rs02/velocity_rad_s"
+        type: "std_msgs/msg/Float32"
+        fields: { mech_velocity_rads: "data" }
+
+      "RS02_Status1__current":
+        topic: "/td/rs02/phase_current_a"
+        type: "std_msgs/msg/Float32"
+        fields: { phase_current_A: "data" }
+
+      "RS02_Status1__busv":
+        topic: "/td/rs02/bus_voltage_v"
+        type: "std_msgs/msg/Float32"
+        fields: { dc_bus_V: "data" }
+
+      "RS02_Status2__mtemp":
+        topic: "/td/rs02/motor_temp_c"
+        type: "std_msgs/msg/Float32"
+        fields: { motor_temp_C: "data" }
+
+      "RS02_Status2__dtemp":
+        topic: "/td/rs02/driver_temp_c"
+        type: "std_msgs/msg/Float32"
+        fields: { driver_temp_C: "data" }
+
+      "RS02_Status2__faults":
+        topic: "/td/rs02/fault_bits"
+        type: "std_msgs/msg/UInt32"
+        fields: { fault_bits: "data" }
+
+      "RS02_Status2__status":
+        topic: "/td/rs02/status_bits"
+        type: "std_msgs/msg/UInt32"
+        fields: { status_bits: "data" }

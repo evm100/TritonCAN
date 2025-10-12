@@ -1,0 +1,52 @@
+
+VERSION ""
+
+NS_ :
+    NS_DESC_
+    CM_
+    BA_DEF_
+    BA_
+    VAL_
+    CAT_DEF_
+    CAT_
+    FILTER
+    BA_DEF_DEF_
+    EV_DATA_
+    ENVVAR_DATA_
+    SGTYPE_
+    SGTYPE_VAL_
+    BA_DEF_SGTYPE_
+    BA_SGTYPE_
+    SIG_TYPE_REF_
+    VAL_TABLE_
+    SIG_GROUP_
+    SIG_VALTYPE_
+    SIGTYPE_VALTYPE_
+    BO_TX_BU_
+    BA_DEF_REL_
+    BA_REL_
+    BA_DEF_DEF_REL_
+    BU_SG_REL_
+    BU_EV_REL_
+    BU_BO_REL_
+    SG_MUL_VAL_
+
+BS_:
+
+BU_: RS02
+
+# RS02 telemetry split across two 8-byte frames (Classical CAN)
+# Frame IDs chosen as examples; adjust to real IDs when available.
+
+BO_ 528 RS02_Status1: 8 RS02
+ SG_ mech_angle_deg     : 0|16@1+ (0.1,0) [0|3600] "deg" RS02
+ SG_ mech_velocity_rads : 16|16@1+ (0.01,0) [-1000|1000] "rad/s" RS02
+ SG_ phase_current_A    : 32|16@1+ (0.01,0) [0|500] "A" RS02
+ SG_ dc_bus_V           : 48|16@1+ (0.01,0) [0|1000] "V" RS02
+
+BO_ 529 RS02_Status2: 8 RS02
+ SG_ motor_temp_C   : 0|8@1+ (1,0) [-40|200] "C" RS02
+ SG_ driver_temp_C  : 8|8@1+ (1,0) [-40|200] "C" RS02
+ SG_ fault_bits     : 16|16@1+ (1,0) [0|65535] "" RS02
+ SG_ status_bits    : 32|16@1+ (1,0) [0|65535] "" RS02
+ SG_ reserved       : 48|16@1+ (1,0) [0|65535] "" RS02

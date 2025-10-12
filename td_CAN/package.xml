@@ -1,0 +1,22 @@
+
+<?xml version="1.0"?>
+<package format="3">
+  <name>td_can_bridges</name>
+  <version>0.1.0</version>
+  <description>Multi-bus ROS 2 &lt;-&gt; SocketCAN bridges with DBC mapping (Python).</description>
+  <maintainer email="td@example.com">td</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>python3-can</exec_depend>
+  <exec_depend>python3-cantools</exec_depend>
+  <exec_depend>ros2launch</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
