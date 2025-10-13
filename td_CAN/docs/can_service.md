@@ -5,6 +5,15 @@ service and the Python API that powers both ROS and non-ROS integrations.
 The intent is to make it easy for any team to add devices without knowing the
 internals of `rclpy` or the ROS 2 launch system.
 
+> **Key principle:** The CAN API is a standalone application focused solely on
+> TritonCAN's CAN protocol. It is **not** a ROS 2 node. Any ROS 2 integration is
+> implemented in a separate ROS 2 → CAN API adapter that consumes this service
+> layer. That adapter is responsible for mapping ROS publishers, subscribers,
+> services, and actions to the device protocol defined in our docs and the
+> future device registry. Keeping the boundaries strict ensures the CAN API
+> remains the single, well-documented entry point for interacting with devices
+> without touching raw CAN frames.
+
 ## 1. High level architecture
 
 ```
@@ -24,8 +33,9 @@ DBC files   ─┘
   buses and their frame mappings.
 * **CanBusService** – reusable runtime that opens SocketCAN, loads the DBC
   database and takes care of RX/TX loops and CAN message encoding/decoding.
-* **ROS bridge** – thin wrapper that maps ROS publishers/subscribers to the
-  service (`BusWorker`, `TopicTxBinding`, `RxBinding`).
+* **ROS bridge** – a separate ROS 2 application that maps publishers,
+  subscribers, services, and actions to the CAN service using
+  `BusWorker`, `TopicTxBinding`, and `RxBinding`.
 
 Your project can either consume the YAML definitions through the ROS bridge or
 instantiate `CanBusService` directly to hook up any other application.
@@ -139,13 +149,19 @@ messages.
 
 ## 4. Working with ROS
 
-The ROS bridge (`td_can_bridges.bridge_node`) now delegates almost all runtime
-work to `CanBusService`. When the node starts it:
+The ROS bridge (`td_can_bridges.bridge_node`) is a **consumer** of the CAN API,
+not part of it. The bridge is responsible for translating ROS concepts—topics,
+services, and actions—into the TritonCAN device protocol exposed by this
+service. It loads the same YAML/DBC definitions as any other client and wires
+them up to ROS primitives at runtime.
+
+When the ROS bridge launches it:
 
 1. Calls `load_bridge_config` to parse the YAML file.
 2. Instantiates a `BusWorker` per bus, which in turn:
    * Registers all TX/RX bindings with the service.
-   * Creates ROS publishers/subscribers using metadata from the YAML file.
+   * Creates ROS publishers, subscribers, services, and actions using metadata
+     from the YAML file or its own bridge-specific configuration.
    * Starts the CAN RX loop.
 
 The previous YAML format remains valid. Existing ROS deployments should keep
@@ -159,8 +175,8 @@ working while non-ROS clients can share the same config file.
    * Add `rx_frames` entries for telemetry the device publishes. Use
      `dbc_message` when mapping the same frame to multiple ROS topics or custom
      payloads.
-3. (ROS) Launch `td_can_bridge` with the updated YAML.
-4. (Non-ROS) Import `CanBusService` and reuse the same YAML.
+3. (ROS) Launch the separate ROS 2 → CAN API bridge with the updated YAML.
+4. (Non-ROS) Import `CanBusService` directly and reuse the same YAML.
 
 Following these steps keeps the CAN service definitions in one place and makes
 it straightforward for other teams to integrate without touching ROS code.
