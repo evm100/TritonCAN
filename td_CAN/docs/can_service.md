@@ -1,9 +1,18 @@
 # TritonCAN Service Layer API
 
 This document describes the stable YAML/DBC driven interface for the CAN
-service and the Python API that powers both ROS and non-ROS integrations.
-The intent is to make it easy for any team to add devices without knowing the
-internals of `rclpy` or the ROS 2 launch system.
+service and the Python API that powers both ROS and non-ROS integrations. The
+intent is to make it easy for any team to add devices without touching raw CAN
+frames or knowing the internals of `rclpy` or the ROS 2 launch system.
+
+> **Key principle:** The CAN API is a standalone application focused solely on
+> TritonCAN's CAN protocol. It is **not** a ROS 2 node. Any ROS 2 integration is
+> implemented in a separate ROS 2 → CAN API adapter that consumes this service
+> layer. That adapter is responsible for mapping ROS publishers, subscribers,
+> services, and actions to the device protocol defined in our docs and the
+> future device registry. Keeping the boundaries strict ensures the CAN API
+> remains the single, well-documented entry point for interacting with devices
+> without touching raw CAN frames.
 
 ## 1. High level architecture
 
@@ -24,11 +33,15 @@ DBC files   ─┘
   buses and their frame mappings.
 * **CanBusService** – reusable runtime that opens SocketCAN, loads the DBC
   database and takes care of RX/TX loops and CAN message encoding/decoding.
-* **ROS bridge** – thin wrapper that maps ROS publishers/subscribers to the
-  service (`BusWorker`, `TopicTxBinding`, `RxBinding`).
+* **ROS bridge** – a separate ROS 2 application that maps publishers,
+  subscribers, services, and actions to the CAN service using
+  `BusWorker`, `TopicTxBinding`, and `RxBinding`.
 
 Your project can either consume the YAML definitions through the ROS bridge or
-instantiate `CanBusService` directly to hook up any other application.
+instantiate `CanBusService` directly to hook up any other application. The
+device registry described below produces the same YAML artifacts for both
+consumers, so embedded engineers update one description and every client stays
+in sync.
 
 ## 2. YAML schema
 
@@ -139,28 +152,105 @@ messages.
 
 ## 4. Working with ROS
 
-The ROS bridge (`td_can_bridges.bridge_node`) now delegates almost all runtime
-work to `CanBusService`. When the node starts it:
+The ROS bridge (`td_can_bridges.bridge_node`) is a **consumer** of the CAN API,
+not part of it. The bridge is responsible for translating ROS concepts—topics,
+services, and actions—into the TritonCAN device protocol exposed by this
+service. It loads the same YAML/DBC definitions as any other client and wires
+them up to ROS primitives at runtime.
+
+When the ROS bridge launches it:
 
 1. Calls `load_bridge_config` to parse the YAML file.
 2. Instantiates a `BusWorker` per bus, which in turn:
    * Registers all TX/RX bindings with the service.
-   * Creates ROS publishers/subscribers using metadata from the YAML file.
+   * Creates ROS publishers, subscribers, services, and actions using metadata
+     from the YAML file or its own bridge-specific configuration.
    * Starts the CAN RX loop.
 
 The previous YAML format remains valid. Existing ROS deployments should keep
 working while non-ROS clients can share the same config file.
 
-## 5. Adding a new device
+## 5. Device registry and auto-generated APIs
 
-1. Extend the appropriate DBC file with the new message/signals.
-2. Update the YAML config:
-   * Add `tx_topics` entries for commands the device should receive.
-   * Add `rx_frames` entries for telemetry the device publishes. Use
-     `dbc_message` when mapping the same frame to multiple ROS topics or custom
-     payloads.
-3. (ROS) Launch `td_can_bridge` with the updated YAML.
-4. (Non-ROS) Import `CanBusService` and reuse the same YAML.
+The long-term contract for TritonCAN is a **device registry** that captures the
+full set of messages, telemetry fields, and callable functions for each device
+type. Every consumer—CLI tools, embedded diagnostics, the future ROS bridge—can
+generate their bindings from that registry instead of hand-editing YAML. The
+registry has three layers:
 
-Following these steps keeps the CAN service definitions in one place and makes
-it straightforward for other teams to integrate without touching ROS code.
+1. **Authoritative device docs** (Markdown) describing the hardware behavior in
+   plain language.
+2. **Structured manifests** (YAML) checked into `docs/device_registry/` that
+   reference DBC frames, list commands, and define friendly API names.
+3. **Codegen** that turns the manifests into TritonCAN configs for
+   `CanBusService` and any adapters.
+
+### 5.1 Authoring a new device type
+
+1. Extend the DBC file with all frames and signals the device emits or
+   receives.
+2. Create or update the device's Markdown documentation under `docs/devices/`.
+   Capture:
+   * A plain-language overview of the device's purpose and operating modes.
+   * Tables for telemetry signals (name, units, DBC signal reference).
+   * Tables for commands, including the default values and behavior notes.
+
+### 5.2 Create the manifest
+
+Add a new YAML manifest (e.g. `docs/device_registry/rs02.yaml`) with three
+sections:
+
+```yaml
+device: RS02
+dbc_file: ../td_CAN/schemas/rs02.dbc
+
+commands:
+  set_velocity:
+    dbc_message: RS02_Command
+    description: Set wheel velocity in rad/s.
+    fields:
+      target_velocity_rads: velocity
+
+telemetry:
+  velocity:
+    dbc_message: RS02_Status1
+    fields:
+      mech_velocity_rads: velocity
+```
+
+Key ideas:
+
+* `commands` expose **plain-name API calls** (e.g. `set_velocity`) that are easy
+  to invoke from Python or, later, ROS services/actions. Each entry maps the
+  friendly name to a DBC message and the signal aliases to expose.
+* `telemetry` lists the outputs the service should publish, again keyed by a
+  friendly name. Additional metadata (units, scaling, safety constraints) can be
+  embedded here for tooling.
+
+### 5.3 Generate service configs
+
+A generator script (added in a future change) will translate the manifest into
+`BridgeConfig` YAML by:
+
+1. Expanding every `commands` entry into a `tx_topics` binding whose key is the
+   plain-language command name.
+2. Emitting `rx_frames` entries for each telemetry block and attaching any
+   metadata needed by downstream clients.
+3. Producing adapter-specific extras (e.g. ROS message types) from optional
+   fields in the manifest.
+
+The output YAML feeds directly into `load_bridge_config`. That keeps the CAN API
+focused on protocol translation, while embedded engineers stay productive by
+authoring manifests instead of glue code.
+
+### 5.4 Deploying the new device
+
+1. Run the generator to refresh the TritonCAN YAML.
+2. (ROS) Launch the separate ROS 2 → CAN API bridge with the regenerated YAML
+   and implement any ROS-specific logic (services/actions) in that adapter.
+3. (Non-ROS) Import `CanBusService` directly and call the friendly command names
+   exposed by the generator.
+
+Following this flow keeps the CAN service definitions in one place, gives new
+teammates a repeatable playbook, and paves the way for the dedicated ROS bridge
+to consume the exact same device contracts.
