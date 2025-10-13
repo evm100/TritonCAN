@@ -1,0 +1,103 @@
+vendor: RoboStride
+model: RS03
+category: actuator
+revision: RS03-EN
+mechanical:
+  rated_voltage_v: 48
+  operating_voltage_v: [24, 60]
+  rated_torque_nm: 20
+  peak_torque_nm: 60
+  rated_speed_rpm: 180
+  no_load_speed_rpm: 200
+  rated_phase_current_apk: 13
+  max_phase_current_apk: 43
+  gear_ratio: 9
+  weight_g: 880
+  temperature_range_c: [-20, 50]
+  storage_temperature_c: [-30, 70]
+  humidity_percent: [5, 85]
+protocols:
+  - name: robostride_private
+    physical_layer: CAN2.0B
+    bitrate_bps: 1000000
+    frame_format: extended
+    default_mode: motion_control
+    command_types:
+      - type: 0
+        identifier: get_device_id
+        response_type: 0
+      - type: 1
+        identifier: motion_control
+        response_type: 2
+      - type: 2
+        identifier: feedback
+      - type: 3
+        identifier: enable
+        response_type: 2
+      - type: 4
+        identifier: stop
+        response_type: 2
+      - type: 6
+        identifier: set_mechanical_zero
+        response_type: 2
+      - type: 7
+        identifier: set_can_id
+        response_type: 0
+      - type: 17
+        identifier: read_parameter
+        response_type: 0
+      - type: 18
+        identifier: write_parameter
+        response_type: 2
+        persistence: volatile
+      - type: 21
+        identifier: fault_feedback
+      - type: 22
+        identifier: save_parameters
+        response_type: 2
+      - type: 23
+        identifier: set_baud_rate
+        response_type: 0
+      - type: 24
+        identifier: enable_active_reporting
+      - type: 25
+        identifier: set_protocol
+        response_type: 0
+    faults:
+      - source: 0x3022
+        description: shared_with_RS02
+      - source: 0x3024
+        description: driver_chip_fault_code_1
+      - source: 0x3025
+        description: driver_chip_fault_code_2
+  - name: mit
+    physical_layer: CAN2.0B
+    bitrate_bps: 1000000
+    frame_format: standard
+    default_mode: motion_control
+    commands:
+      - id: 1
+        name: enable_motor
+      - id: 2
+        name: stop_motor
+      - id: 3
+        name: motion_control_dynamic
+      - id: 4
+        name: set_zero_non_position
+      - id: 5
+        name: clear_errors
+      - id: 6
+        name: set_operation_mode
+      - id: 7
+        name: modify_motor_can_id
+      - id: 8
+        name: change_protocol
+      - id: 9
+        name: modify_host_can_id
+      - id: 10
+        name: position_control
+      - id: 11
+        name: velocity_control
+notes:
+  - Shares the same CAN protocol surface as RS02; only mechanical limits differ.
+  - Use torque/current limits from this file when generating API validation rules.

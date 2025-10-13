@@ -1,0 +1,133 @@
+vendor: RoboStride
+model: RS02
+category: actuator
+revision: RS02-EN
+mechanical:
+  rated_voltage_v: 48
+  operating_voltage_v: [24, 60]
+  rated_torque_nm: 6
+  peak_torque_nm: 17
+  rated_speed_rpm: 360
+  no_load_speed_rpm: 410
+  rated_phase_current_apk: 7
+  max_phase_current_apk: 23
+  gear_ratio: 7.75
+  weight_g: 380
+  temperature_range_c: [-20, 50]
+  storage_temperature_c: [-30, 70]
+  humidity_percent: [5, 85]
+protocols:
+  - name: robostride_private
+    physical_layer: CAN2.0B
+    bitrate_bps: 1000000
+    frame_format: extended
+    default_mode: motion_control
+    command_types:
+      - type: 0
+        identifier: get_device_id
+        response_type: 0
+        description: Retrieve node ID and 64-bit MCU identifier.
+      - type: 1
+        identifier: motion_control
+        response_type: 2
+        payload:
+          - torque_command
+          - position_command
+          - velocity_command
+          - kp
+          - kd
+      - type: 2
+        identifier: feedback
+        description: Periodic telemetry frame used by most responses.
+      - type: 3
+        identifier: enable
+        response_type: 2
+      - type: 4
+        identifier: stop
+        response_type: 2
+      - type: 6
+        identifier: set_mechanical_zero
+        response_type: 2
+      - type: 7
+        identifier: set_can_id
+        response_type: 0
+      - type: 17
+        identifier: read_parameter
+        response_type: 0
+      - type: 18
+        identifier: write_parameter
+        response_type: 2
+        persistence: volatile
+      - type: 21
+        identifier: fault_feedback
+      - type: 22
+        identifier: save_parameters
+        response_type: 2
+      - type: 23
+        identifier: set_baud_rate
+        response_type: 0
+      - type: 24
+        identifier: enable_active_reporting
+      - type: 25
+        identifier: set_protocol
+        response_type: 0
+    faults:
+      - source: 0x3022
+        bits:
+          0: motor_over_temperature
+          1: driver_chip_fault
+          2: under_voltage
+          3: over_voltage
+          7: encoder_not_calibrated
+          14: iq_overload
+      - source: 0x3024
+        description: driver_chip_fault_code_1
+      - source: 0x3025
+        description: driver_chip_fault_code_2
+    watchdog:
+      parameter: CAN_TIMEOUT
+      units: milliseconds
+      note: Value 20000 corresponds to 1 second timeout.
+  - name: mit
+    physical_layer: CAN2.0B
+    bitrate_bps: 1000000
+    frame_format: standard
+    default_mode: motion_control
+    commands:
+      - id: 1
+        name: enable_motor
+        response: data_feedback
+      - id: 2
+        name: stop_motor
+        response: data_feedback
+      - id: 3
+        name: motion_control_dynamic
+        response: data_feedback
+      - id: 4
+        name: set_zero_non_position
+        response: data_feedback
+      - id: 5
+        name: clear_errors
+        response: data_feedback
+      - id: 6
+        name: set_operation_mode
+        response: data_feedback
+      - id: 7
+        name: modify_motor_can_id
+        response: mcu_identification
+      - id: 8
+        name: change_protocol
+        response: mcu_identification
+      - id: 9
+        name: modify_host_can_id
+        response: mcu_identification
+      - id: 10
+        name: position_control
+        response: data_feedback
+      - id: 11
+        name: velocity_control
+        response: data_feedback
+notes:
+  - Parameters written with type 18 must be persisted with type 22 to survive power cycles.
+  - Zero calibration supported in Motion Control and CSP; PP mode blocks zeroing.
+  - Set damper = 1 to disable passive braking when the motor is unpowered.

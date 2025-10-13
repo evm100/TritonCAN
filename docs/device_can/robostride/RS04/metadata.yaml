@@ -1,0 +1,89 @@
+vendor: RoboStride
+model: RS04
+category: actuator
+revision: RS04-EN
+mechanical:
+  rated_voltage_v: 48
+  operating_voltage_v: [24, 60]
+  rated_torque_nm: 40
+  peak_torque_nm: 120
+  rated_speed_rpm: 167
+  no_load_speed_rpm: 200
+  rated_phase_current_apk: 27
+  max_phase_current_apk: 90
+  gear_ratio: 9
+  weight_g: 1420
+  temperature_range_c: [-20, 50]
+  storage_temperature_c: [-30, 70]
+  humidity_percent: [5, 85]
+protocols:
+  - name: robostride_private
+    physical_layer: CAN2.0B
+    bitrate_bps: 1000000
+    frame_format: extended
+    default_mode: motion_control
+    command_types:
+      - type: 0
+        identifier: get_device_id
+      - type: 1
+        identifier: motion_control
+      - type: 2
+        identifier: feedback
+      - type: 3
+        identifier: enable
+      - type: 4
+        identifier: stop
+      - type: 6
+        identifier: set_mechanical_zero
+      - type: 7
+        identifier: set_can_id
+      - type: 17
+        identifier: read_parameter
+      - type: 18
+        identifier: write_parameter
+        persistence: volatile
+      - type: 21
+        identifier: fault_feedback
+      - type: 22
+        identifier: save_parameters
+      - type: 23
+        identifier: set_baud_rate
+      - type: 24
+        identifier: enable_active_reporting
+      - type: 25
+        identifier: set_protocol
+    faults:
+      - source: 0x3022
+      - source: 0x3024
+      - source: 0x3025
+  - name: mit
+    physical_layer: CAN2.0B
+    bitrate_bps: 1000000
+    frame_format: standard
+    default_mode: motion_control
+    commands:
+      - id: 1
+        name: enable_motor
+      - id: 2
+        name: stop_motor
+      - id: 3
+        name: motion_control_dynamic
+      - id: 4
+        name: set_zero_non_position
+      - id: 5
+        name: clear_errors
+      - id: 6
+        name: set_operation_mode
+      - id: 7
+        name: modify_motor_can_id
+      - id: 8
+        name: change_protocol
+      - id: 9
+        name: modify_host_can_id
+      - id: 10
+        name: position_control
+      - id: 11
+        name: velocity_control
+notes:
+  - Peak current draw demands heavy-gauge cabling and careful power budgeting.
+  - Thermal limits should be tied to the 130 °C winding cap when generating safety rules.
