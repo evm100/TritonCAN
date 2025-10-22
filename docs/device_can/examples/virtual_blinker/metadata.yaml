@@ -1,0 +1,54 @@
+vendor: TritonCAN
+model: virtual_blinker
+category: demo
+revision: v1
+protocols:
+  - name: vcan_blink
+    physical_layer: CAN2.0A
+    bitrate_bps: 500000
+    frame_format: standard
+    description: Two-message handshake for blink/hello-world demos.
+    messages:
+      - name: BlinkFromA
+        frame_id: 0x200
+        dlc: 2
+        producer: device_a
+        consumers:
+          - device_b
+        signals:
+          - name: blink_state
+            bits: 0-7
+            type: uint8
+            description: 0=off, 1=on, other values allowed for experiments.
+          - name: sequence
+            bits: 8-15
+            type: uint8
+            description: Monotonic counter incremented with each send.
+      - name: BlinkFromB
+        frame_id: 0x201
+        dlc: 2
+        producer: device_b
+        consumers:
+          - device_a
+        signals:
+          - name: blink_state
+            bits: 0-7
+            type: uint8
+          - name: sequence
+            bits: 8-15
+            type: uint8
+instances:
+  - slug: device_a
+    description: Left terminal in the demo, transmits BlinkFromA frames.
+    tx_message: BlinkFromA
+    rx_message: BlinkFromB
+  - slug: device_b
+    description: Right terminal in the demo, transmits BlinkFromB frames.
+    tx_message: BlinkFromB
+    rx_message: BlinkFromA
+artifacts:
+  dbc: td_CAN/td_can_bridges/schemas/vcan_blink.dbc
+  yaml: td_CAN/config/vcan_blink_demo.yaml
+  scripts:
+    - td_CAN/scripts/vcan_blink_device.py
+    - td_CAN/scripts/vcan_blink_launch.sh
