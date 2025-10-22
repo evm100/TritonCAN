@@ -1,0 +1,17 @@
+menu "SLCAN Bridge Options"
+    config SLCAN_DEFAULT_BITRATE
+        int "Default CAN bitrate (bps)"
+        default 500000
+        help
+          Default bitrate used on startup. SLCAN 'Sx' can switch before 'O'.
+          Common: 125000, 250000, 500000, 1000000
+
+    config SLCAN_TWAI_TX_GPIO
+        int "TWAI TX GPIO"
+        default 5
+
+    config SLCAN_TWAI_RX_GPIO
+        int "TWAI RX GPIO"
+        default 4
+endmenu
+
