@@ -1,0 +1,36 @@
+buses:
+  - name: vcan_demo
+    interface: vcan0
+    bitrate: 500000
+    dbc_file: ../td_can_bridges/schemas/vcan_blink.dbc
+    description: Minimal virtual blink bus for SocketCAN demos.
+    tx_topics:
+      device_a_command:
+        dbc_message: BlinkFromA
+        fields:
+          blink: blink_state
+          seq: sequence
+        metadata:
+          role: device_a
+      device_b_command:
+        dbc_message: BlinkFromB
+        fields:
+          blink: blink_state
+          seq: sequence
+        metadata:
+          role: device_b
+    rx_frames:
+      device_a_inbox:
+        dbc_message: BlinkFromB
+        fields:
+          blink_state: blink
+          sequence: seq
+        target: device_a
+      device_b_inbox:
+        dbc_message: BlinkFromA
+        fields:
+          blink_state: blink
+          sequence: seq
+        target: device_b
+logging:
+  level: INFO

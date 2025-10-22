@@ -158,6 +158,24 @@ services, and actions—into the TritonCAN device protocol exposed by this
 service. It loads the same YAML/DBC definitions as any other client and wires
 them up to ROS primitives at runtime.
 
+## 5. Virtual blink demo quickstart
+
+For a hands-on introduction without hardware, the repository ships with a
+two-node virtual blinker:
+
+1. Create a SocketCAN interface: `sudo modprobe vcan && sudo ip link add dev
+   vcan0 type vcan && sudo ip link set up vcan0`.
+2. Launch `td_CAN/scripts/vcan_blink_launch.sh`. The helper script opens a tmux
+   session containing two terminals, one per virtual device.
+3. In either pane type `blink on`, `blink off`, `blink <value>`, or `toggle` to
+   send frames. The opposite pane prints the decoded payload via the CAN
+   service daemon.
+4. Exit with `quit` or detach from tmux (`Ctrl+B`, then `D`).
+
+The demo uses `td_CAN/config/vcan_blink_demo.yaml` and
+`td_CAN/td_can_bridges/schemas/vcan_blink.dbc`, so it doubles as a reference for
+authoring new device definitions.
+
 When the ROS bridge launches it:
 
 1. Calls `load_bridge_config` to parse the YAML file.
@@ -170,7 +188,7 @@ When the ROS bridge launches it:
 The previous YAML format remains valid. Existing ROS deployments should keep
 working while non-ROS clients can share the same config file.
 
-## 5. Device registry and auto-generated APIs
+## 6. Device registry and auto-generated APIs
 
 The long-term contract for TritonCAN is a **device registry** that captures the
 full set of messages, telemetry fields, and callable functions for each device
@@ -185,7 +203,7 @@ registry has three layers:
 3. **Codegen** that turns the manifests into TritonCAN configs for
    `CanBusService` and any adapters.
 
-### 5.1 Authoring a new device type
+### 6.1 Authoring a new device type
 
 1. Extend the DBC file with all frames and signals the device emits or
    receives.
@@ -195,7 +213,7 @@ registry has three layers:
    * Tables for telemetry signals (name, units, DBC signal reference).
    * Tables for commands, including the default values and behavior notes.
 
-### 5.2 Create the manifest
+### 6.2 Create the manifest
 
 Add a new YAML manifest (e.g. `docs/device_registry/rs02.yaml`) with three
 sections:
@@ -227,7 +245,7 @@ Key ideas:
   friendly name. Additional metadata (units, scaling, safety constraints) can be
   embedded here for tooling.
 
-### 5.3 Generate service configs
+### 6.3 Generate service configs
 
 A generator script (added in a future change) will translate the manifest into
 `BridgeConfig` YAML by:
@@ -243,7 +261,7 @@ The output YAML feeds directly into `load_bridge_config`. That keeps the CAN API
 focused on protocol translation, while embedded engineers stay productive by
 authoring manifests instead of glue code.
 
-### 5.4 Deploying the new device
+### 6.4 Deploying the new device
 
 1. Run the generator to refresh the TritonCAN YAML.
 2. (ROS) Launch the separate ROS 2 → CAN API bridge with the regenerated YAML

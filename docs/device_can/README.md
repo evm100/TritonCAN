@@ -46,3 +46,11 @@ runtime can expose new layman-friendly functions without hard-coding device logi
 
 The long-term plan is to have a documentation parser that converts each device dossier into a
 module bundle. The consistency enforced here is what will make that automation tractable.
+
+## Demo & Reference Devices
+
+Looking for a software-only sandbox before touching production hardware? The
+[examples/virtual_blinker](./examples/virtual_blinker/README.md) dossier shows
+how to stand up two virtual CAN endpoints on a shared `vcan` bus and exercise
+the TritonCAN daemon with a hello-world "blink" command. It includes the YAML
+and DBC artifacts plus scripts that spawn paired interactive terminals.
