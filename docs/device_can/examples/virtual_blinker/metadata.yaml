@@ -47,8 +47,8 @@ instances:
     tx_message: BlinkFromB
     rx_message: BlinkFromA
 artifacts:
-  dbc: td_CAN/td_can_bridges/schemas/vcan_blink.dbc
-  yaml: td_CAN/config/vcan_blink_demo.yaml
+  dbc: python-can/td_can_bridges/schemas/vcan_blink.dbc
+  yaml: python-can/config/vcan_blink_demo.yaml
   scripts:
-    - td_CAN/scripts/vcan_blink_device.py
-    - td_CAN/scripts/vcan_blink_launch.sh
+    - python-can/scripts/vcan_blink_device.py
+    - python-can/scripts/vcan_blink_launch.sh

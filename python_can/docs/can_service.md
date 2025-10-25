@@ -165,15 +165,15 @@ two-node virtual blinker:
 
 1. Create a SocketCAN interface: `sudo modprobe vcan && sudo ip link add dev
    vcan0 type vcan && sudo ip link set up vcan0`.
-2. Launch `td_CAN/scripts/vcan_blink_launch.sh`. The helper script opens a tmux
+2. Launch `python-can/scripts/vcan_blink_launch.sh`. The helper script opens a tmux
    session containing two terminals, one per virtual device.
 3. In either pane type `blink on`, `blink off`, `blink <value>`, or `toggle` to
    send frames. The opposite pane prints the decoded payload via the CAN
    service daemon.
 4. Exit with `quit` or detach from tmux (`Ctrl+B`, then `D`).
 
-The demo uses `td_CAN/config/vcan_blink_demo.yaml` and
-`td_CAN/td_can_bridges/schemas/vcan_blink.dbc`, so it doubles as a reference for
+The demo uses `python-can/config/vcan_blink_demo.yaml` and
+`python-can/td_can_bridges/schemas/vcan_blink.dbc`, so it doubles as a reference for
 authoring new device definitions.
 
 When the ROS bridge launches it:
@@ -220,7 +220,7 @@ sections:
 
 ```yaml
 device: RS02
-dbc_file: ../td_CAN/schemas/rs02.dbc
+dbc_file: ../python-can/schemas/rs02.dbc
 
 commands:
   set_velocity:

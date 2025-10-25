@@ -57,7 +57,7 @@ sequence counter provided by its counterpart.
    sudo ip link add dev vcan0 type vcan
    sudo ip link set up vcan0
    ```
-2. Launch the helper script `td_CAN/scripts/vcan_blink_launch.sh`. This spawns
+2. Launch the helper script `python-can/scripts/vcan_blink_launch.sh`. This spawns
    two terminal panes (via `tmux`) running `vcan_blink_device.py` for Device A
    and Device B respectively.
 3. In either pane type one of the commands from Section 5 (e.g. `blink on`). The
@@ -74,8 +74,8 @@ sequence counter provided by its counterpart.
   - `observe(callback)` → subscribe to the RX handler for automated testing
 
 ## 8. Validation & Testing Notes
-- The YAML/DBC pair live in `td_CAN/config/vcan_blink_demo.yaml` and
-  `td_CAN/td_can_bridges/schemas/vcan_blink.dbc`.
+- The YAML/DBC pair live in `python-can/config/vcan_blink_demo.yaml` and
+  `python-can/td_can_bridges/schemas/vcan_blink.dbc`.
 - The interactive script logs all decoded frames to stdout. Use `--log-level
   DEBUG` to see encoded payloads as they are dispatched.
 - This example intentionally avoids ROS to keep the feedback loop short.
