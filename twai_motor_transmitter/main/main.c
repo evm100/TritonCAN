@@ -9,6 +9,11 @@
 
 static const char *TAG = "RS02_DEMO";
 
+#define TWAI_ALERT_MASK (TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED)
+#define TWAI_RECOVERY_TIMEOUT pdMS_TO_TICKS(1000)
+
+static bool rs02_ensure_twai_ready(void);
+
 #define RS02_P_MIN (-12.57f)
 #define RS02_P_MAX (12.57f)
 #define RS02_V_MIN (-44.0f)
@@ -68,6 +73,11 @@ static inline uint32_t rs02_make_identifier(uint8_t mode, uint16_t data_field)
 
 static esp_err_t rs02_send_frame(uint8_t mode, uint16_t data_field, const uint8_t payload[8])
 {
+    if (!rs02_ensure_twai_ready()) {
+        ESP_LOGE(TAG, "TWAI bus not ready; dropping mode %u frame", mode);
+        return ESP_FAIL;
+    }
+
     twai_message_t message = {
         .identifier = rs02_make_identifier(mode, data_field),
         .data_length_code = 8,
@@ -76,6 +86,13 @@ static esp_err_t rs02_send_frame(uint8_t mode, uint16_t data_field, const uint8_
     memcpy(message.data, payload, sizeof(message.data));
 
     esp_err_t err = twai_transmit(&message, pdMS_TO_TICKS(100));
+    if (err == ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "TWAI not ready when sending mode %u; attempting recovery", mode);
+        if (rs02_ensure_twai_ready()) {
+            err = twai_transmit(&message, pdMS_TO_TICKS(100));
+        }
+    }
+
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to send mode %u frame: %s", mode, esp_err_to_name(err));
     }
@@ -110,6 +127,86 @@ static esp_err_t rs02_motion_command(float torque, float position, float velocit
     return rs02_send_frame(RS02_MODE_OPERATION_CONTROL, torque_field, payload);
 }
 
+static bool rs02_wait_for_alert(uint32_t alert_mask, TickType_t timeout)
+{
+    const TickType_t start = xTaskGetTickCount();
+    while (true) {
+        TickType_t now = xTaskGetTickCount();
+        if ((now - start) >= timeout) {
+            return false;
+        }
+
+        TickType_t wait_ticks = timeout - (now - start);
+        uint32_t alerts = 0;
+        esp_err_t err = twai_read_alerts(&alerts, wait_ticks);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to read TWAI alerts: %s", esp_err_to_name(err));
+            return false;
+        }
+
+        if ((alerts & alert_mask) != 0) {
+            return true;
+        }
+    }
+}
+
+static bool rs02_recover_bus_off(void)
+{
+    twai_status_info_t status = {0};
+    if (twai_get_status_info(&status) == ESP_OK) {
+        ESP_LOGW(TAG,
+                 "TWAI bus-off (tx_err=%u rx_err=%u rx_missed=%u state=%d); starting recovery",
+                 status.tx_error_counter,
+                 status.rx_error_counter,
+                 status.rx_missed_count,
+                 status.state);
+    }
+
+    esp_err_t err = twai_initiate_recovery();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initiate TWAI recovery: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    if (!rs02_wait_for_alert(TWAI_ALERT_BUS_RECOVERED, TWAI_RECOVERY_TIMEOUT)) {
+        ESP_LOGE(TAG, "Timeout waiting for TWAI bus recovery");
+        return false;
+    }
+
+    ESP_LOGI(TAG, "TWAI bus recovered");
+    return true;
+}
+
+static bool rs02_ensure_twai_ready(void)
+{
+    twai_status_info_t status = {0};
+    esp_err_t err = twai_get_status_info(&status);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Unable to query TWAI status: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    switch (status.state) {
+        case TWAI_STATE_RUNNING:
+            return true;
+        case TWAI_STATE_BUS_OFF:
+            return rs02_recover_bus_off();
+        case TWAI_STATE_STOPPED:
+            ESP_LOGW(TAG, "TWAI stopped; restarting driver");
+            if (twai_start() != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to restart TWAI driver");
+                return false;
+            }
+            return true;
+        case TWAI_STATE_RECOVERING:
+            ESP_LOGW(TAG, "Waiting for TWAI recovery to complete");
+            return rs02_wait_for_alert(TWAI_ALERT_BUS_RECOVERED, TWAI_RECOVERY_TIMEOUT);
+        default:
+            ESP_LOGE(TAG, "Unknown TWAI state %d", status.state);
+            return false;
+    }
+}
+
 static void init_twai(void)
 {
     twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_21, GPIO_NUM_20, TWAI_MODE_NORMAL);
@@ -118,6 +215,7 @@ static void init_twai(void)
 
     ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
     ESP_ERROR_CHECK(twai_start());
+    ESP_ERROR_CHECK(twai_reconfigure_alerts(TWAI_ALERT_MASK, NULL));
 }
 
 void app_main(void)
