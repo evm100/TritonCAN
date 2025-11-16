@@ -1,0 +1,19 @@
+menu "TWAI Motor Demo Configuration"
+
+config TWAI_RS02_MOTOR_ID
+    int "RS02 motor CAN ID"
+    range 0 255
+    default 1
+    help
+        Select the node ID used when addressing the RoboStride RS02 actuator over CAN.
+        The value must match the device's configured CAN ID (Communication Type 7).
+
+config TWAI_RS02_MASTER_ID
+    int "Host controller CAN ID"
+    range 0 65535
+    default 0
+    help
+        Configure the master/controller identifier that the RS02 expects in the
+        extended CAN identifier's data field for enable/stop frames.
+
+endmenu
