@@ -9,7 +9,7 @@ static const char *TAG = "TWAI_TX";
 
 static void init_twai(void)
 {
-    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_21, GPIO_NUM_20, TWAI_MODE_NORMAL);
+    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_20, GPIO_NUM_21, TWAI_MODE_NORMAL);
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_500KBITS();
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -37,7 +37,7 @@ void app_main(void)
     while (true) {
         twai_message_t message = {
             .identifier = 0x123,
-            .data_length_code = 5,
+            .data_length_code = 3,
             .data = {0}
         };
 

@@ -1,0 +1,2 @@
+source /home/evm100/Documents/Triton Droids/TritonCAN/twai_motor_demo/build/bootloader/gdbinit/symbols
+source /home/evm100/Documents/Triton Droids/TritonCAN/twai_motor_demo/build/bootloader/gdbinit/connect

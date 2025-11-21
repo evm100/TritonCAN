@@ -31,6 +31,8 @@ if tmux has-session -t "${SESSION_NAME}" 2>/dev/null; then
   exit 1
 fi
 
+export PYTHONPATH="${PROJECT_DIR}${PYTHONPATH:+:${PYTHONPATH}}"
+
 TMUX_BASE_CMD=("python3" "${DEVICE_SCRIPT}" "--config" "${CONFIG_FILE}")
 DEVICE_A_CMD=("${TMUX_BASE_CMD[@]}" "--device" "device_a")
 DEVICE_B_CMD=("${TMUX_BASE_CMD[@]}" "--device" "device_b")

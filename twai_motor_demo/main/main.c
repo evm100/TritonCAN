@@ -1,254 +1,212 @@
-#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/twai.h"
 #include "esp_log.h"
-#include "sdkconfig.h"
 
-static const char *TAG = "RS02_MOTOR_DEMO";
+static const char *TAG = "RS02_BASIC";
 
-#define TWAI_ALERT_MASK (TWAI_ALERT_BUS_OFF | TWAI_ALERT_BUS_RECOVERED)
-#define TWAI_RECOVERY_TIMEOUT pdMS_TO_TICKS(1000)
+// ----- RS02 limits from manual (private protocol, operation-control mode) -----
+#define P_MIN   -12.57f   // rad  (approx -4π)
+#define P_MAX    12.57f   // rad  (approx 4π)
+#define V_MIN   -44.0f    // rad/s
+#define V_MAX    44.0f    // rad/s
+#define KP_MIN    0.0f
+#define KP_MAX  500.0f
+#define KD_MIN    0.0f
+#define KD_MAX    5.0f
+#define T_MIN   -17.0f    // N·m
+#define T_MAX    17.0f
 
-#define RS02_P_MIN (-12.57f)
-#define RS02_P_MAX (12.57f)
-#define RS02_V_MIN (-44.0f)
-#define RS02_V_MAX (44.0f)
-#define RS02_KP_MIN (0.0f)
-#define RS02_KP_MAX (500.0f)
-#define RS02_KD_MIN (0.0f)
-#define RS02_KD_MAX (5.0f)
-#define RS02_T_MIN (-17.0f)
-#define RS02_T_MAX (17.0f)
+// Default IDs for a fresh RS02 (motor CAN_ID = 1, host/master CAN_ID = 1)
+#define RS02_MOTOR_ID   1
+#define RS02_MASTER_ID  1
 
-#define RS02_MODE_OPERATION_CONTROL 0x01u
-#define RS02_MODE_ENABLE 0x03u
-#define RS02_MODE_STOP 0x04u
+// ---- Helpers -----------------------------------------------------------------
 
-#define DEMO_SPEED_RAD_S (1.0f)
-#define DEMO_TORQUE_FEED_FORWARD (0.0f)
-#define DEMO_POSITION_REF (0.0f)
-#define DEMO_KP (0.0f)
-#define DEMO_KD (1.0f)
-
-static bool rs02_ensure_twai_ready(void);
-static bool rs02_wait_for_alert(uint32_t alert_mask, TickType_t timeout);
-
-static inline uint16_t rs02_float_to_uint(float value, float min, float max)
+static int float_to_uint(float x, float x_min, float x_max, int bits)
 {
-    float clamped = value;
-    if (clamped > max) {
-        clamped = max;
-    } else if (clamped < min) {
-        clamped = min;
-    }
+    float span = x_max - x_min;
+    float offset = x_min;
 
-    const float span = max - min;
-    const float normalized = (clamped - min) * (((float)((1 << 16) - 1)) / span);
-    if (normalized < 0.0f) {
-        return 0;
-    }
-    if (normalized > 65535.0f) {
-        return 0xFFFF;
-    }
-    return (uint16_t)normalized;
+    if (x > x_max) x = x_max;
+    else if (x < x_min) x = x_min;
+
+    return (int)((x - offset) * ((float)((1 << bits) - 1)) / span);
 }
 
-static inline void rs02_store_u16_be(uint8_t *dest, uint16_t value)
+/**
+ * Build extended 29-bit identifier in the same layout as the GD32 example:
+ *   bits  0..7   : motor CAN_ID
+ *   bits  8..23  : master_id (host CAN_ID)
+ *   bits 24..28  : communication type (mode)
+ *   bits 29..31  : reserved (0)
+ *
+ * This matches the IDs you see like 0x3000101 for type=3, master=1, motor=1.
+ */
+static uint32_t build_ext_id(uint8_t motor_id, uint16_t master_id, uint8_t type)
 {
-    dest[0] = (uint8_t)(value >> 8);
-    dest[1] = (uint8_t)(value & 0xFF);
+    uint32_t id = 0;
+    id |= (uint32_t)motor_id;
+    id |= ((uint32_t)master_id << 8);
+    id |= ((uint32_t)type << 24);
+    return id;
 }
 
-static inline uint32_t rs02_make_identifier(uint8_t mode, uint16_t data_field)
+// ---- CAN / TWAI initialization ----------------------------------------------
+
+static void can_init(void)
 {
-    const uint32_t reserved = 0;
-    return (reserved << 29) |
-           (((uint32_t)mode & 0x1Fu) << 24) |
-           (((uint32_t)data_field & 0xFFFFu) << 8) |
-           ((uint32_t)CONFIG_TWAI_RS02_MOTOR_ID & 0xFFu);
-}
+    // TX = GPIO 20, RX = GPIO 21, normal mode
+    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(
+            GPIO_NUM_20, GPIO_NUM_21, TWAI_MODE_NORMAL);
 
-static esp_err_t rs02_send_frame(uint8_t mode, uint16_t data_field, const uint8_t payload[8])
-{
-    if (!rs02_ensure_twai_ready()) {
-        ESP_LOGE(TAG, "TWAI bus not ready; dropping mode %u frame", mode);
-        return ESP_FAIL;
-    }
-
-    twai_message_t message = {
-        .identifier = rs02_make_identifier(mode, data_field),
-        .data_length_code = 8,
-        .flags = TWAI_MSG_FLAG_EXTD,
-    };
-    memcpy(message.data, payload, sizeof(message.data));
-
-    esp_err_t err = twai_transmit(&message, pdMS_TO_TICKS(100));
-    if (err == ESP_ERR_INVALID_STATE) {
-        ESP_LOGW(TAG, "TWAI not ready when sending mode %u; attempting recovery", mode);
-        if (rs02_ensure_twai_ready()) {
-            err = twai_transmit(&message, pdMS_TO_TICKS(100));
-        }
-    }
-
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to send mode %u frame: %s", mode, esp_err_to_name(err));
-    }
-    return err;
-}
-
-static esp_err_t rs02_enable_motor(void)
-{
-    uint8_t payload[8] = {0};
-    ESP_LOGI(TAG, "Enabling RS02 motor (motor ID=%u host ID=%u)", CONFIG_TWAI_RS02_MOTOR_ID, CONFIG_TWAI_RS02_MASTER_ID);
-    return rs02_send_frame(RS02_MODE_ENABLE, (uint16_t)CONFIG_TWAI_RS02_MASTER_ID, payload);
-}
-
-static esp_err_t rs02_stop_motor(void)
-{
-    uint8_t payload[8] = {0};
-    ESP_LOGI(TAG, "Stopping RS02 motor");
-    return rs02_send_frame(RS02_MODE_STOP, (uint16_t)CONFIG_TWAI_RS02_MASTER_ID, payload);
-}
-
-static esp_err_t rs02_motion_command(float torque, float position, float velocity, float kp, float kd)
-{
-    uint8_t payload[8] = {0};
-
-    rs02_store_u16_be(&payload[0], rs02_float_to_uint(position, RS02_P_MIN, RS02_P_MAX));
-    rs02_store_u16_be(&payload[2], rs02_float_to_uint(velocity, RS02_V_MIN, RS02_V_MAX));
-    rs02_store_u16_be(&payload[4], rs02_float_to_uint(kp, RS02_KP_MIN, RS02_KP_MAX));
-    rs02_store_u16_be(&payload[6], rs02_float_to_uint(kd, RS02_KD_MIN, RS02_KD_MAX));
-
-    uint16_t torque_field = rs02_float_to_uint(torque, RS02_T_MIN, RS02_T_MAX);
-    ESP_LOGI(TAG, "Commanding velocity=%.2f rad/s torque_ff=%.2f", velocity, torque);
-    return rs02_send_frame(RS02_MODE_OPERATION_CONTROL, torque_field, payload);
-}
-
-static bool rs02_recover_bus_off(void)
-{
-    twai_status_info_t status = {0};
-    if (twai_get_status_info(&status) == ESP_OK) {
-        ESP_LOGW(TAG,
-                 "TWAI bus-off (tx_err=%u rx_err=%u rx_missed=%u state=%d); starting recovery",
-                 status.tx_error_counter,
-                 status.rx_error_counter,
-                 status.rx_missed_count,
-                 status.state);
-    }
-
-    esp_err_t err = twai_initiate_recovery();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initiate TWAI recovery: %s", esp_err_to_name(err));
-        return false;
-    }
-
-    if (!rs02_wait_for_alert(TWAI_ALERT_BUS_RECOVERED, TWAI_RECOVERY_TIMEOUT)) {
-        ESP_LOGE(TAG, "Timeout waiting for TWAI bus recovery");
-        return false;
-    }
-
-    ESP_LOGI(TAG, "TWAI bus recovered");
-    return true;
-}
-
-static bool rs02_wait_for_alert(uint32_t alert_mask, TickType_t timeout)
-{
-    const TickType_t start = xTaskGetTickCount();
-    while (true) {
-        TickType_t now = xTaskGetTickCount();
-        if ((now - start) >= timeout) {
-            return false;
-        }
-
-        TickType_t wait_ticks = timeout - (now - start);
-        uint32_t alerts = 0;
-        esp_err_t err = twai_read_alerts(&alerts, wait_ticks);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to read TWAI alerts: %s", esp_err_to_name(err));
-            return false;
-        }
-
-        if ((alerts & alert_mask) != 0) {
-            return true;
-        }
-    }
-}
-
-static bool rs02_ensure_twai_ready(void)
-{
-    twai_status_info_t status = {0};
-    esp_err_t err = twai_get_status_info(&status);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Unable to query TWAI status: %s", esp_err_to_name(err));
-        return false;
-    }
-
-    switch (status.state) {
-        case TWAI_STATE_RUNNING:
-            return true;
-        case TWAI_STATE_BUS_OFF:
-            return rs02_recover_bus_off();
-        case TWAI_STATE_STOPPED:
-            ESP_LOGW(TAG, "TWAI stopped; restarting driver");
-            if (twai_start() != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to restart TWAI driver");
-                return false;
-            }
-            return true;
-        case TWAI_STATE_RECOVERING:
-            ESP_LOGW(TAG, "Waiting for TWAI recovery to complete");
-            return rs02_wait_for_alert(TWAI_ALERT_BUS_RECOVERED, TWAI_RECOVERY_TIMEOUT);
-        default:
-            ESP_LOGE(TAG, "Unknown TWAI state %d", status.state);
-            return false;
-    }
-}
-
-static void init_twai(void)
-{
-    twai_general_config_t g_config = TWAI_GENERAL_CONFIG_DEFAULT(GPIO_NUM_21, GPIO_NUM_20, TWAI_MODE_NORMAL);
+    // 1 Mbit/s timing (built-in macro)
     twai_timing_config_t t_config = TWAI_TIMING_CONFIG_1MBITS();
+
+    // Accept all frames
     twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
     ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
     ESP_ERROR_CHECK(twai_start());
-    ESP_ERROR_CHECK(twai_reconfigure_alerts(TWAI_ALERT_MASK, NULL));
+    ESP_LOGI(TAG, "TWAI (CAN) started at 1 Mbps on TX=20, RX=21");
 }
 
-static void run_motor_demo(void)
+// ---- RS02 command helpers ----------------------------------------------------
+
+/**
+ * Send communication type 3: "Motor enabled to run"
+ * (Data bytes are all zero.)
+ */
+static esp_err_t rs02_send_enable(void)
 {
-    const TickType_t spin_duration = pdMS_TO_TICKS(3000);
-    const TickType_t stop_duration = pdMS_TO_TICKS(1000);
+    twai_message_t msg = {0};
+    msg.extd = 1;                      // extended frame
+    msg.rtr = 0;
+    msg.identifier = build_ext_id(RS02_MOTOR_ID, RS02_MASTER_ID, 3);
+    msg.data_length_code = 8;
+    memset(msg.data, 0, 8);
 
-    while (true) {
-        if (rs02_motion_command(DEMO_TORQUE_FEED_FORWARD, DEMO_POSITION_REF, DEMO_SPEED_RAD_S, DEMO_KP, DEMO_KD) == ESP_OK) {
-            vTaskDelay(spin_duration);
+    esp_err_t err = twai_transmit(&msg, pdMS_TO_TICKS(100));
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Sent ENABLE (type 3)");
+    } else {
+        ESP_LOGE(TAG, "Failed to send ENABLE: %s", esp_err_to_name(err));
+    }
+    return err;
+}
+
+/**
+ * Send communication type 1: operation control mode motor command
+ *
+ * Parameters:
+ *   torque_ff : feed-forward torque (N·m)
+ *   pos       : target position (rad)  – we keep this at 0.0
+ *   vel       : target speed (rad/s)
+ *   kp, kd    : gains
+ *
+ * Note: on a fresh motor, it's already in operation-control mode after power-on.
+ */
+static esp_err_t rs02_send_op_control(float torque_ff,
+                                      float pos,
+                                      float vel,
+                                      float kp,
+                                      float kd)
+{
+    twai_message_t msg = {0};
+    msg.extd = 1;
+    msg.rtr = 0;
+    msg.identifier = build_ext_id(RS02_MOTOR_ID, RS02_MASTER_ID, 1);
+    msg.data_length_code = 8;
+
+    uint16_t pos_u = (uint16_t)float_to_uint(pos,   P_MIN,  P_MAX, 16);
+    uint16_t vel_u = (uint16_t)float_to_uint(vel,   V_MIN,  V_MAX, 16);
+    uint16_t kp_u  = (uint16_t)float_to_uint(kp,    KP_MIN, KP_MAX,16);
+    uint16_t kd_u  = (uint16_t)float_to_uint(kd,    KD_MIN, KD_MAX,16);
+
+    // Byte layout per the manual example: t_ff in ID "data" field, then P, V, Kp, Kd as 16-bit big-endian.
+    uint16_t torque_u = (uint16_t)float_to_uint(torque_ff, T_MIN, T_MAX, 16);
+
+    // However, in the reference code torque is carried in the ID "data" field:
+    // txCanIdEx.data = float_to_uint(torque, T_MIN, T_MAX, 16);
+    // For simplicity we just keep torque_ff small (0) and ignore it here.
+    (void)torque_u; // not used – keep compiler happy
+
+    msg.data[0] = (uint8_t)(pos_u >> 8);
+    msg.data[1] = (uint8_t)(pos_u & 0xFF);
+    msg.data[2] = (uint8_t)(vel_u >> 8);
+    msg.data[3] = (uint8_t)(vel_u & 0xFF);
+    msg.data[4] = (uint8_t)(kp_u  >> 8);
+    msg.data[5] = (uint8_t)(kp_u  & 0xFF);
+    msg.data[6] = (uint8_t)(kd_u  >> 8);
+    msg.data[7] = (uint8_t)(kd_u  & 0xFF);
+
+    esp_err_t err = twai_transmit(&msg, pdMS_TO_TICKS(100));
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to send op-control cmd: %s", esp_err_to_name(err));
+    }
+    return err;
+}
+
+// Optional: simple RX logger (feedback / fault frames)
+static void can_rx_task(void *arg)
+{
+    twai_message_t rx_msg;
+    while (1) {
+        if (twai_receive(&rx_msg, portMAX_DELAY) == ESP_OK) {
+            if (rx_msg.extd) {
+                printf("RX: ID=0x%08lx DLC=%d Data:", (unsigned long)rx_msg.identifier,
+                       rx_msg.data_length_code);
+            } else {
+                printf("RX: STD ID=0x%03lx DLC=%d Data:", (unsigned long)rx_msg.identifier,
+                       rx_msg.data_length_code);
+            }
+            for (int i = 0; i < rx_msg.data_length_code; i++) {
+                printf(" %02X", rx_msg.data[i]);
+            }
+            printf("\n");
         }
-
-        rs02_stop_motor();
-        vTaskDelay(stop_duration);
-
-        if (rs02_motion_command(DEMO_TORQUE_FEED_FORWARD, DEMO_POSITION_REF, -DEMO_SPEED_RAD_S, DEMO_KP, DEMO_KD) == ESP_OK) {
-            vTaskDelay(spin_duration);
-        }
-
-        rs02_stop_motor();
-        vTaskDelay(stop_duration);
     }
 }
+
+// ---- app_main ---------------------------------------------------------------
 
 void app_main(void)
 {
-    init_twai();
-    ESP_LOGI(TAG, "TWAI RS02 motor demo ready (motor ID %u)", CONFIG_TWAI_RS02_MOTOR_ID);
+    can_init();
 
-    if (rs02_enable_motor() != ESP_OK) {
-        ESP_LOGE(TAG, "Unable to enable RS02 actuator; aborting demo");
-        return;
+    // Optional: start RX logger
+    xTaskCreate(can_rx_task, "can_rx", 4096, NULL, 5, NULL);
+
+    vTaskDelay(pdMS_TO_TICKS(500));  // small delay after power-up
+
+    // 1) Enable the motor (communication type 3)
+    rs02_send_enable();
+
+    vTaskDelay(pdMS_TO_TICKS(500));
+
+    ESP_LOGI(TAG, "Starting basic motion test");
+
+    // 2) Repeatedly send a small positive speed command.
+    //
+    //    Operation-control mode suggestion from manual:
+    //      t_ff = 0
+    //      v_set = 1 rad/s
+    //      p_set = 0
+    //      Kp   = 0
+    //      Kd   = 1
+    //
+    //    This should make the motor spin slowly in one direction with light damping.
+    while (1) {
+        rs02_send_op_control(
+            0.0f,   // torque_ff
+            0.0f,   // position setpoint (rad)
+            1.0f,   // velocity setpoint (rad/s) – keep small
+            0.0f,   // Kp
+            1.0f    // Kd
+        );
+
+        vTaskDelay(pdMS_TO_TICKS(20));  // 50 Hz command rate is plenty for a simple test
     }
-
-    run_motor_demo();
 }
