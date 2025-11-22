@@ -1,0 +1,2 @@
+source /home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/gdbinit/symbols
+source /home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/gdbinit/connect

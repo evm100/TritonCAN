@@ -1,7 +1,7 @@
 {
     "version":            "1.2",
     "project_name":       "twai_transmitter",
-    "project_version":    "12b8beb-dirty",
+    "project_version":    "33d9a0a-dirty",
     "project_path":       "/home/evm100/Documents/Triton Droids/TritonCAN/twai_transmitter",
     "idf_path":           "/home/evm100/esp-idf",
     "build_dir":          "/home/evm100/Documents/Triton Droids/TritonCAN/twai_transmitter/build",

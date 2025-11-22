@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/CMakeFiles/bootloader"
+		},
+		{
+			"file" : "/home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/CMakeFiles/bootloader.rule"
+		},
+		{
+			"file" : "/home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/CMakeFiles/bootloader-complete.rule"
+		},
+		{
+			"file" : "/home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule"
+		},
+		{
+			"file" : "/home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule"
+		},
+		{
+			"file" : "/home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule"
+		},
+		{
+			"file" : "/home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule"
+		},
+		{
+			"file" : "/home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule"
+		},
+		{
+			"file" : "/home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule"
+		},
+		{
+			"file" : "/home/evm100/Documents/Triton Droids/TritonCAN/nativeCAN/esp32_s3_can_v32_stable/build/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"bootloader"
+		],
+		"name" : "bootloader"
+	}
+}
