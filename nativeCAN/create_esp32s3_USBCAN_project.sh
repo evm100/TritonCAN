@@ -243,6 +243,7 @@ bool tud_vendor_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_requ
 
 void tud_vendor_rx_cb(uint8_t itf) {
     if (!is_can_started) { tud_vendor_read_flush(); return; }
+    
     struct gs_host_frame frame;
     while (tud_vendor_available() >= sizeof(frame)) {
         if (tud_vendor_read(&frame, sizeof(frame)) == sizeof(frame)) {
@@ -253,8 +254,27 @@ void tud_vendor_rx_cb(uint8_t itf) {
                 msg.extd = 1; msg.identifier &= 0x1FFFFFFF; 
             }
             memcpy(msg.data, frame.data, 8);
+            
+            // Transmit to Physical Bus
             if (twai_transmit(&msg, 0) == ESP_OK) {
                 tx_pps++;
+                
+                // === FIX START: Send Echo back to Linux ===
+                // Linux gs_usb driver waits for this to free the buffer slot
+                struct gs_host_frame echo_frame;
+                memset(&echo_frame, 0, sizeof(echo_frame));
+                
+                echo_frame.echo_id = frame.echo_id; // CRITICAL: Match the ID Linux sent
+                echo_frame.can_id = frame.can_id;
+                echo_frame.can_dlc = frame.can_dlc;
+                echo_frame.channel = frame.channel;
+                echo_frame.flags = 0; // 0 = Normal Frame (Echo)
+                memcpy(echo_frame.data, frame.data, 8);
+                
+                // Send to the same queue that handles RX frames
+                xQueueSend(can_to_usb_queue, &echo_frame, 0);
+                // === FIX END ===
+
                 #if DEBUG_ALL_FRAMES
                 ESP_LOGI(TAG, "TX -> ID: %lx", msg.identifier);
                 #endif
