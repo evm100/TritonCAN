@@ -18,18 +18,16 @@ import math
 import signal
 
 # --- 1. Environment Setup ---
-# Add the SDK path (assuming running from python/ directory)
-sys.path.append(os.path.join(os.path.dirname(__file__), 'robstride_dynamics'))
-# Also try standard install location
-sys.path.append('/usr/local/lib/python3/dist-packages')
+# Local self-contained driver lives next to this script.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from robstride_dynamics import RobstrideBus, Motor, ParameterType, CommunicationType
-    import robstride_dynamics.table as table
+    from robstride import RobstrideBus, Motor, ParameterType, CommunicationType
+    from robstride import table
 except ImportError as e:
-    print(f"❌ Critical Error: Could not import RobStride SDK.")
+    print(f"❌ Critical Error: Could not import local robstride module.")
     print(f"   Details: {e}")
-    print("   Please ensure you are running this from the 'python/' directory.")
+    print("   Make sure robstride.py sits next to this script.")
     sys.exit(1)
 
 # --- 2. RS-02 Parameter Patch (Crucial for correct physics) ---

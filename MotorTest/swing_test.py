@@ -1,11 +1,13 @@
+import os
 import sys
 import time
 import math
 import signal
 
-# Adjust path to find the SDK
-sys.path.append('./seeed-projects/robstride_control/RobStride_Control-e0a01d38335972c2fa1dd1e15bb222c4e15e866b/python')
-from robstride_dynamics import RobstrideBus, Motor, ParameterType
+# Local self-contained driver lives next to this script.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from robstride import RobstrideBus, Motor, ParameterType
+import robstride as _rs
 
 # --- CONFIGURATION ---
 MOTOR_ID = 127          # Target Motor ID
@@ -25,8 +27,8 @@ RS02_PARAMS = {
     }
 }
 
-# Monkey-patch the table in the SDK if RS-02 isn't defined correctly there
-import robstride_dynamics.table as table
+# Re-affirm RS-02 scaling (matches manual; harmless if already correct).
+table = _rs.table
 table.MODEL_MIT_POSITION_TABLE["rs-02"] = RS02_PARAMS["rs-02"]["position"]
 table.MODEL_MIT_VELOCITY_TABLE["rs-02"] = RS02_PARAMS["rs-02"]["velocity"]
 table.MODEL_MIT_TORQUE_TABLE["rs-02"]   = RS02_PARAMS["rs-02"]["torque"]
