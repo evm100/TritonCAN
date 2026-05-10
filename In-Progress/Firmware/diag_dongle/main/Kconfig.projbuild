@@ -1,0 +1,61 @@
+menu "Triton Diag Dongle"
+
+config DIAG_AP_PASSWORD
+    string "WiFi AP password"
+    default "tritondroids"
+    help
+        Password for the SoftAP the dongle hosts. SSID is auto-generated as
+        "TritonDiag-XXXX" using the last 4 hex of the MAC.
+
+config DIAG_HOST_ID
+    hex "RobStride host ID (master ID in extended frames)"
+    range 0x00 0xFFFF
+    default 0xFD
+    help
+        Matches the convention in MotorTest/robstride.py and the rest of
+        the TritonCAN tooling.
+
+config DIAG_CAN_TX_GPIO
+    int "CAN TX (transceiver D pin)"
+    range 0 48
+    default 20
+
+config DIAG_CAN_RX_GPIO
+    int "CAN RX (transceiver R pin)"
+    range 0 48
+    default 21
+
+config DIAG_OLED_SDA_GPIO
+    int "OLED SDA"
+    range 0 48
+    default 8
+
+config DIAG_OLED_SCL_GPIO
+    int "OLED SCL"
+    range 0 48
+    default 9
+
+config DIAG_ARGB_GPIO
+    int "Onboard WS2812 GPIO"
+    range 0 48
+    default 48
+    help
+        ESP32-S3-DevKitC-1 onboard ARGB sits on GPIO 48.
+
+config DIAG_BATT_ADC_GPIO
+    int "Battery sense GPIO (ADC1)"
+    range 1 10
+    default 4
+    help
+        100k/100k divider from VBAT. ADC1 channel chosen automatically from
+        the GPIO. ESP32-S3 ADC1 covers GPIO 1-10.
+
+config DIAG_BATT_LOW_MV
+    int "Battery low warning threshold (mV)"
+    default 3400
+
+config DIAG_BATT_CRIT_MV
+    int "Battery critical cutoff (mV)"
+    default 3100
+
+endmenu

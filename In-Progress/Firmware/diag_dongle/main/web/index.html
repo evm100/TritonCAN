@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Triton Diag</title>
+<style>
+:root {
+  --bg:#0d1117; --panel:#161b22; --line:#30363d; --fg:#c9d1d9; --muted:#8b949e;
+  --ok:#2da44e; --warn:#d29922; --bad:#cf222e; --accent:#58a6ff;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+}
+* { box-sizing:border-box; }
+html,body { margin:0; padding:0; background:var(--bg); color:var(--fg);
+  font-family:system-ui,-apple-system,Segoe UI,sans-serif; font-size:14px; }
+header { position:sticky; top:0; background:var(--panel); border-bottom:1px solid var(--line);
+  padding:10px 14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; z-index:10; }
+header h1 { margin:0; font-size:16px; font-weight:600; }
+header .pill { padding:3px 8px; border-radius:999px; background:#21262d; font-size:12px;
+  border:1px solid var(--line); color:var(--muted); }
+header .pill.ok   { color:#3fb950; border-color:#1f6f37; }
+header .pill.warn { color:#e3b341; border-color:#7d6611; }
+header .pill.bad  { color:#f85149; border-color:#7d2226; }
+header .grow { flex:1 1 auto; }
+main { padding:12px; max-width:920px; margin:0 auto; display:grid; gap:12px; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; }
+.card h2 { margin:0 0 8px 0; font-size:14px; font-weight:600; color:var(--fg); }
+.card h3 { margin:0 0 6px 0; font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+.row { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; }
+.metric { background:#0d1117; border:1px solid var(--line); border-radius:6px; padding:10px; }
+.metric .label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+.metric .value { font-family:var(--mono); font-size:20px; margin-top:4px; }
+.metric .unit { color:var(--muted); font-size:12px; margin-left:4px; }
+.btnrow { display:flex; gap:8px; flex-wrap:wrap; }
+button { background:#21262d; color:var(--fg); border:1px solid var(--line); border-radius:6px;
+  padding:9px 14px; font-size:13px; cursor:pointer; font-weight:500; }
+button:hover:not(:disabled) { background:#30363d; }
+button.primary { background:#1f6feb; border-color:#1f6feb; color:white; }
+button.primary:hover:not(:disabled) { background:#388bfd; }
+button.green { background:#238636; border-color:#238636; color:white; font-weight:600; }
+button.green:hover:not(:disabled) { background:#2ea043; }
+button:disabled { opacity:.5; cursor:not-allowed; }
+.muted { color:var(--muted); }
+.banner { padding:10px 12px; border-radius:6px; margin-bottom:8px; font-size:13px; line-height:1.4; }
+.banner.ok   { background:#0d2b16; border:1px solid #1f6f37; color:#56d364; }
+.banner.warn { background:#332100; border:1px solid #7d6611; color:#e8a317; }
+.banner.bad  { background:#3d0a0e; border:1px solid #7d2226; color:#ff7b72; }
+.banner b { font-weight:600; }
+.next { color:var(--muted); margin-top:6px; font-size:12px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { text-align:left; color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase;
+  letter-spacing:.05em; padding:6px 8px; border-bottom:1px solid var(--line); }
+td { padding:6px 8px; border-bottom:1px solid var(--line); font-family:var(--mono); }
+td.pass { color:#56d364; }
+td.fail { color:#ff7b72; }
+canvas { width:100%; height:80px; background:#010409; border-radius:4px; border:1px solid var(--line); }
+.charts { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; margin-top:8px; }
+.chart-label { font-size:11px; color:var(--muted); margin-bottom:2px; }
+#log { font-family:var(--mono); font-size:11px; color:var(--muted); max-height:160px; overflow-y:auto;
+  background:#010409; border:1px solid var(--line); border-radius:4px; padding:8px; }
+#log .err { color:#ff7b72; }
+#log .ok  { color:#56d364; }
+.fault-pill { display:inline-block; padding:2px 6px; border-radius:4px; background:#3d0a0e;
+  color:#ff7b72; font-family:var(--mono); font-size:11px; margin-right:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛠 Triton Diag</h1>
+  <span id="ap" class="pill">—</span>
+  <span id="motor" class="pill">scanning…</span>
+  <span class="grow"></span>
+  <span id="batt" class="pill">— V</span>
+  <span id="conn" class="pill warn">connecting…</span>
+</header>
+
+<main>
+
+<section class="card">
+  <h2>Run diagnostics</h2>
+  <div class="btnrow">
+    <button id="btn-all"     class="green">🟢 Run safe diagnostics (Tier 0+1+2)</button>
+    <button id="btn-rescan"            >Rescan IDs</button>
+    <button id="btn-t0"                >Tier 0 — bus sanity</button>
+    <button id="btn-t1"                >Tier 1 — discovery</button>
+    <button id="btn-t2"                >Tier 2 — motor health</button>
+  </div>
+  <p class="muted" style="margin:8px 0 0 0; font-size:12px;">
+    V1 is observe-only. No motion frames are ever transmitted. Tier 3 unlocks when the E-stop hardware lands.
+  </p>
+</section>
+
+<section class="card" id="result-card" hidden>
+  <h2>Latest result</h2>
+  <div id="result-banner" class="banner"></div>
+  <div id="result-next"   class="next"></div>
+  <table id="result-table"><thead>
+    <tr><th>ID</th><th>Test</th><th></th><th>Detail</th></tr></thead><tbody></tbody></table>
+</section>
+
+<section class="card">
+  <h2>Live telemetry</h2>
+  <div class="row">
+    <div class="metric"><div class="label">Position</div>
+      <div class="value"><span id="m-pos">—</span><span class="unit">rad</span></div></div>
+    <div class="metric"><div class="label">Velocity</div>
+      <div class="value"><span id="m-vel">—</span><span class="unit">rad/s</span></div></div>
+    <div class="metric"><div class="label">Iq</div>
+      <div class="value"><span id="m-iq">—</span><span class="unit">A</span></div></div>
+    <div class="metric"><div class="label">VBUS</div>
+      <div class="value"><span id="m-vbus">—</span><span class="unit">V</span></div></div>
+    <div class="metric"><div class="label">Temp</div>
+      <div class="value"><span id="m-temp">—</span><span class="unit">°C</span></div></div>
+    <div class="metric"><div class="label">Run mode</div>
+      <div class="value"><span id="m-mode">—</span></div></div>
+  </div>
+  <div class="charts">
+    <div><div class="chart-label">Position (rad)</div><canvas id="c-pos" height="80"></canvas></div>
+    <div><div class="chart-label">VBUS (V)</div><canvas id="c-vbus" height="80"></canvas></div>
+  </div>
+</section>
+
+<section class="card">
+  <h3>Motor</h3>
+  <div id="motor-detail" class="muted">No motor detected.</div>
+  <h3 style="margin-top:10px;">Faults</h3>
+  <div id="motor-faults" class="muted">—</div>
+</section>
+
+<section class="card">
+  <h3>Event log</h3>
+  <div id="log"></div>
+</section>
+
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls) => {
+  const el = $('log');
+  const div = document.createElement('div');
+  if (cls) div.className = cls;
+  const t = new Date().toLocaleTimeString();
+  div.textContent = `[${t}] ${msg}`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  while (el.childElementCount > 200) el.removeChild(el.firstChild);
+};
+
+// --- WebSocket ---
+let ws;
+let lastTelemTs = 0;
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen    = () => { $('conn').className = 'pill ok';  $('conn').textContent = 'connected'; };
+  ws.onclose   = () => { $('conn').className = 'pill bad'; $('conn').textContent = 'disconnected';
+                         setTimeout(connect, 1000); };
+  ws.onerror   = () => { /* close handler will retry */ };
+  ws.onmessage = (e) => {
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (m.type === 'telem')        applyTelem(m);
+    else if (m.type === 'test_result') applyResult(m);
+    else if (m.type === 'event')   log(m.msg, m.cls);
+  };
+}
+
+function applyTelem(m) {
+  lastTelemTs = Date.now();
+  if (m.ap)      $('ap').textContent   = `${m.ap}  ·  ${m.ip || ''}`;
+  if (m.battery) {
+    $('batt').textContent = `${(m.battery.mv/1000).toFixed(2)} V · ${m.battery.pct}%`;
+    $('batt').className   = 'pill ' + (m.battery.ok ? 'ok' : 'bad');
+  }
+  const mt = m.motor || {};
+  if (!mt.detected) {
+    $('motor').className = 'pill warn'; $('motor').textContent = 'no motor';
+    $('motor-detail').textContent = 'No motor detected. Plug into the harness and click Rescan.';
+    $('motor-faults').textContent = '—';
+    setMetric('m-pos','—'); setMetric('m-vel','—'); setMetric('m-iq','—');
+    setMetric('m-vbus','—'); setMetric('m-temp','—'); setMetric('m-mode','—');
+  } else {
+    const faulty = (mt.faults || mt.warnings || mt.fault_bits);
+    $('motor').className = 'pill ' + (faulty ? 'bad' : 'ok');
+    $('motor').textContent = `M${mt.id}` + (faulty ? ' · FAULT' : ' · ok');
+    $('motor-detail').innerHTML =
+      `<b>ID</b> ${mt.id} · <b>UID</b> <code>${mt.uid||'—'}</code>` +
+      ` · <b>mode</b> ${mt.run_mode}` +
+      ` · <b>limits</b> T=${(mt.limit_torque||0).toFixed(2)} V=${(mt.limit_spd||0).toFixed(1)} I=${(mt.limit_cur||0).toFixed(1)}`;
+    setMetric('m-pos',  num(mt.pos, 3));
+    setMetric('m-vel',  num(mt.vel, 2));
+    setMetric('m-iq',   num(mt.iq,  2));
+    setMetric('m-vbus', num(mt.vbus,2));
+    setMetric('m-temp', num(mt.temp,1));
+    setMetric('m-mode', String(mt.run_mode));
+
+    pushChart('c-pos',  mt.pos);
+    pushChart('c-vbus', mt.vbus);
+
+    let f = '';
+    if (mt.faults)     f += `<span class="fault-pill">faults 0x${mt.faults.toString(16)}</span>`;
+    if (mt.warnings)   f += `<span class="fault-pill">warn 0x${mt.warnings.toString(16)}</span>`;
+    if (mt.fault_bits) f += `<span class="fault-pill">fb 0x${mt.fault_bits.toString(16)}</span>`;
+    $('motor-faults').innerHTML = f || '<span class="muted">none</span>';
+  }
+}
+
+function applyResult(m) {
+  $('result-card').hidden = false;
+  const banner = $('result-banner');
+  banner.className = 'banner ' + (m.ok ? 'ok' : 'bad');
+  banner.innerHTML = `<b>${(m.tier||'').toUpperCase()}</b> — ${m.verdict || ''}`;
+  $('result-next').textContent = m.next_action || '';
+  const tbody = $('result-table').querySelector('tbody');
+  tbody.innerHTML = '';
+  for (const t of (m.tests || [])) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="muted">${t.id}</td><td>${t.name}</td>` +
+                   `<td class="${t.pass?'pass':'fail'}">${t.pass?'PASS':'FAIL'}</td>` +
+                   `<td>${t.detail||''}</td>`;
+    tbody.appendChild(tr);
+  }
+  log(`${(m.tier||'').toUpperCase()}: ${m.verdict||''}`, m.ok?'ok':'err');
+}
+
+function num(v, p) { return (v===undefined||v===null||isNaN(v)) ? '—' : Number(v).toFixed(p); }
+function setMetric(id, v) { $(id).textContent = v; }
+
+// --- Tiny strip-chart helper ---
+const charts = {};
+function pushChart(canvasId, value) {
+  let s = charts[canvasId];
+  if (!s) s = charts[canvasId] = { vals: [] };
+  s.vals.push(Number(value));
+  if (s.vals.length > 300) s.vals.shift();
+  drawChart(canvasId, s.vals);
+}
+function drawChart(canvasId, vals) {
+  const c = $(canvasId); if (!c) return;
+  const dpr = window.devicePixelRatio || 1;
+  const W = c.clientWidth, H = c.clientHeight;
+  if (c.width !== W*dpr) { c.width = W*dpr; c.height = H*dpr; }
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+  if (vals.length < 2) return;
+  let mn=Infinity,mx=-Infinity;
+  for (const v of vals) { if (v<mn)mn=v; if (v>mx)mx=v; }
+  if (mx===mn) { mx=mn+1; }
+  ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let i=0;i<vals.length;i++) {
+    const x = i*(W/(vals.length-1||1));
+    const y = H - ((vals[i]-mn)/(mx-mn))*(H-4) - 2;
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px ui-monospace';
+  ctx.fillText(mx.toFixed(2), 4, 12);
+  ctx.fillText(mn.toFixed(2), 4, H-3);
+}
+
+// --- Test buttons ---
+async function runTest(path, label) {
+  const buttons = document.querySelectorAll('button');
+  buttons.forEach(b => b.disabled = true);
+  log(`${label} starting…`);
+  try {
+    const r = await fetch(path, { method:'POST' });
+    const j = await r.json();
+    applyResult({type:'test_result', ...j});
+  } catch (e) {
+    log('Test failed: ' + e, 'err');
+  } finally {
+    buttons.forEach(b => b.disabled = false);
+  }
+}
+$('btn-all'   ).onclick = () => runTest('/api/test/all',    'Run all');
+$('btn-t0'    ).onclick = () => runTest('/api/test/tier0',  'Tier 0');
+$('btn-t1'    ).onclick = () => runTest('/api/test/tier1',  'Tier 1');
+$('btn-t2'    ).onclick = () => runTest('/api/test/tier2',  'Tier 2');
+$('btn-rescan').onclick = () => runTest('/api/test/rescan', 'Rescan');
+
+// Stale-telemetry indicator.
+setInterval(() => {
+  if (Date.now() - lastTelemTs > 3000 && ws && ws.readyState === 1) {
+    $('conn').className = 'pill warn';
+    $('conn').textContent = 'no telemetry';
+  } else if (ws && ws.readyState === 1) {
+    $('conn').className = 'pill ok';
+    $('conn').textContent = 'connected';
+  }
+}, 1000);
+
+connect();
+log('UI loaded');
+</script>
+</body>
+</html>

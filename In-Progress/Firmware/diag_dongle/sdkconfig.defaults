@@ -1,0 +1,37 @@
+CONFIG_IDF_TARGET="esp32s3"
+
+# 240 MHz: web server + CAN task share core 1; we want headroom.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# Use the UART USB-C port (CP2102) for console + flash. Keeps native USB pins
+# (GPIO 19/20) free; we use GPIO 20/21 for CAN like the rest of TritonCAN.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=n
+
+# Larger app partition: embed a full single-page web UI.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# HTTP server / WebSocket
+CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
+
+# WiFi tuning for SoftAP with a handful of clients
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=y
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=y
+
+# Larger main task stack for HTTP setup
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=6144
+
+# FreeRTOS tick: 1 kHz for finer test timing
+CONFIG_FREERTOS_HZ=1000
+
+# Compiler: optimize for size; we have one big web blob in flash
+CONFIG_COMPILER_OPTIMIZATION_SIZE=y
+
+# Logging defaults: info on console, but quiet wifi/httpd noise
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
